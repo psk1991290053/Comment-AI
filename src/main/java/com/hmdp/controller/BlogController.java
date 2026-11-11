@@ -80,4 +80,11 @@ public class BlogController {
         });
         return Result.ok(records);
     }
+
+    @GetMapping("/{id}")
+    public Result queryBlogById(@PathVariable Long id){
+        return blogService.queryBlogById(id);
+    }
+
+
 }
