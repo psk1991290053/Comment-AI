@@ -6,9 +6,11 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.hmdp.dto.Result;
 import com.hmdp.dto.UserDTO;
 import com.hmdp.entity.Blog;
+import com.hmdp.entity.Follow;
 import com.hmdp.entity.User;
 import com.hmdp.mapper.BlogMapper;
 import com.hmdp.service.IBlogService;
+import com.hmdp.service.IFollowService;
 import com.hmdp.utils.UserHolder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -35,6 +37,8 @@ public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements IB
     private StringRedisTemplate stringRedisTemplate;
     @Autowired
     private UserServiceImpl userService;
+    @Autowired
+    private IFollowService followService;
 
     /**
      * 根据id查询笔记
@@ -119,5 +123,32 @@ public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements IB
                 .collect(Collectors.toList());
         //4.返回数据
         return Result.ok(userDTOs);
+    }
+
+    /**
+     * 发布笔记
+     * @param blog
+     * @return
+     */
+    @Override
+    public Result saveBlog(Blog blog) {
+        //1.获取登录用户
+        UserDTO user = UserHolder.getUser();
+        blog.setUserId(user.getId());
+        //2.保存探店博文
+        boolean isSuccess = save(blog);
+        if(!isSuccess){
+            return Result.fail("发布笔记失败!");
+        }
+        //3.推送博文至粉丝的收件箱
+        //3.1获取粉丝列表 select * from tb_follow where follow_user_id = #{blog.getUserId()}
+        List<Follow> fans = followService.query().eq("follow_user_id", blog.getUserId()).list();
+        //3.2给每位粉丝的收件箱推送博文
+        for (Follow fan : fans) {
+            String key = "feed:" + fan.getUserId();
+            stringRedisTemplate.opsForZSet().add(key,blog.getId().toString(),System.currentTimeMillis());
+        }
+        //3.返回id
+        return Result.ok(blog.getId());
     }
 }
