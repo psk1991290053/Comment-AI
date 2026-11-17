@@ -11,16 +11,21 @@ import com.hmdp.dto.UserDTO;
 import com.hmdp.entity.User;
 import com.hmdp.mapper.UserMapper;
 import com.hmdp.service.IUserService;
+import com.hmdp.utils.RedisConstants;
 import com.hmdp.utils.RegexUtils;
 import com.hmdp.utils.SystemConstants;
+import com.hmdp.utils.UserHolder;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.connection.BitFieldSubCommands;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpSession;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -102,6 +107,61 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         stringRedisTemplate.expire(LOGIN_USER_KEY + token,LOGIN_USER_TTL, TimeUnit.MINUTES);
         //通过放行
         return Result.ok(token);
+    }
+
+    /**
+     * 用户签到
+     * @return
+     */
+    @Override
+    public Result sign() {
+        //获取key
+        Long userId = UserHolder.getUser().getId();
+        String suffix = LocalDateTime.now().format(DateTimeFormatter.ofPattern(":yyyyMM"));
+        String key = USER_SIGN_KEY + userId + suffix;
+        //获取offset
+        int day = LocalDateTime.now().getDayOfMonth();
+        //签到
+        stringRedisTemplate.opsForValue().setBit(key,day - 1,true);
+        return Result.ok();
+    }
+
+    /**
+     * 连续签到天数统计
+     * @return
+     */
+    public Result signCount() {
+        //获取key
+        Long userId = UserHolder.getUser().getId();
+        String suffix = LocalDateTime.now().format(DateTimeFormatter.ofPattern(":yyyyMM"));
+        String key = USER_SIGN_KEY + userId + suffix;
+        //获取offset
+        int day = LocalDateTime.now().getDayOfMonth();
+        //拿到从第0位到今天所有的bit位的信息（十进制）
+        List<Long> result = stringRedisTemplate.opsForValue()
+                .bitField(key, BitFieldSubCommands.create()
+                        .get(BitFieldSubCommands.BitFieldType.unsigned(day)).valueAt(0)
+                );
+        //判空
+        if(result == null || result.isEmpty()){
+            return Result.ok(0);
+        }
+        Long num = result.get(0);
+        if(num == 0 || num == null){
+            return Result.ok(0);
+        }
+        //统计
+        int count = 0;
+        while(true){
+            if ((num & 1) == 0) {
+                break;
+            }
+            else{
+                count++;
+            }
+            num >>>= 1;
+        }
+        return Result.ok(count);
     }
 
     /**

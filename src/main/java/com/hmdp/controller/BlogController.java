@@ -109,4 +109,16 @@ public class BlogController {
         return Result.ok(records);
     }
 
+    /**
+     * 滚动分页查询关注者的博客
+     * @param max
+     * @param offset
+     * @return
+     */
+    @GetMapping("/of/follow")
+    public Result queryBlogOfFollow(@RequestParam("lastId") Long max,
+                                    @RequestParam("offset") Integer offset){
+        return blogService.queryBlogOfFollow(max,offset);
+    }
+
 }
